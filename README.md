@@ -1,93 +1,363 @@
-# email_hub
+# Email Hub API Backend - Microservice
 
+Backend API berbasis FastAPI sebagai microservice untuk email hub multi-user dengan integrasi webhook. Dirancang untuk bekerja dengan aplikasi utama yang menangani autentikasi user.
 
+## Fitur
 
-## Getting started
+- ✅ **Microservice Architecture** - Integrasi dengan main app melalui API
+- ✅ **API Key Authentication** - Menggunakan API key dari main app
+- ✅ **Dukungan Multi-user** - Setiap user dapat mengelola beberapa akun email
+- ✅ **Integrasi IMAP/SMTP** - Hubungkan akun email apapun dengan IMAP/SMTP
+- ✅ **Polling Email Otomatis** - Background worker memeriksa email setiap 2 menit
+- ✅ **Integrasi Webhook** - Teruskan email yang diterima ke URL webhook custom
+- ✅ **Kirim & Balas** - Kirim email baru dan balas email yang diterima
+- ✅ **SQLite/PostgreSQL** - Mendukung database SQLite dan PostgreSQL
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
-
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+## Arsitektur Microservice
 
 ```
-cd existing_repo
-git remote add origin https://gitlab.gai.co.id/gai/email_hub.git
-git branch -M main
-git push -uf origin main
+Main App                          Email Hub Microservice
+├── User Registration      ──────> POST /users (buat user baru)
+├── User Authentication           
+├── API Key Generation     ──────> Header: X-API-Key
+└── User Management        ──────> PUT /users/{id}/api-key
+                                   DELETE /users/{id}
+
+                                  Email Hub Features:
+                                  ├── Email Account Management
+                                  ├── Email Polling (Background)
+                                  ├── Webhook Forwarding
+                                  └── Send/Reply Operations
 ```
 
-## Integrate with your tools
+## Instalasi
 
-- [ ] [Set up project integrations](https://gitlab.gai.co.id/gai/email_hub/-/settings/integrations)
+### 1. Clone atau Buat Proyek
 
-## Collaborate with your team
+```bash
+mkdir email-hub-api
+cd email-hub-api
+```
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
+### 2. Buat Virtual Environment
 
-## Test and Deploy
+```bash
+python -m venv venv
+source venv/bin/activate  # Di Windows: venv\Scripts\activate
+```
 
-Use the built-in continuous integration in GitLab.
+### 3. Install Dependencies
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+```bash
+pip install -r requirements.txt
+```
 
-***
+### 4. Konfigurasi Environment
 
-# Editing this README
+```bash
+cp .env.example .env
+# Edit .env dan atur DATABASE_URL Anda
+```
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+### 5. Jalankan Aplikasi
 
-## Suggestions for a good README
+```bash
+python main.py
+```
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+API akan tersedia di `http://localhost:8000`
 
-## Name
-Choose a self-explaining name for your project.
+## Dokumentasi API
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+Setelah berjalan, kunjungi:
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+## Integrasi dengan Main App
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+### 1. Buat User di Microservice (dari Main App)
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+Ketika user baru registrasi di main app, panggil endpoint ini:
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+```python
+# Di main app setelah user register
+import httpx
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+async def create_email_hub_user(user_id: str, email: str, api_key: str):
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            "http://email-hub-service:8000/users",
+            json={
+                "external_user_id": user_id,
+                "email": email,
+                "api_key": api_key,
+                "full_name": "John Doe"
+            }
+        )
+    return response.json()
+```
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+### 2. Update API Key (ketika user generate API key baru)
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+```python
+async def update_email_hub_api_key(user_id: str, new_api_key: str):
+    async with httpx.AsyncClient() as client:
+        response = await client.put(
+            f"http://email-hub-service:8000/users/{user_id}/api-key",
+            params={"new_api_key": new_api_key}
+        )
+    return response.json()
+```
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+### 3. Hapus User (ketika user dihapus dari main app)
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+```python
+async def delete_email_hub_user(user_id: str):
+    async with httpx.AsyncClient() as client:
+        response = await client.delete(
+            f"http://email-hub-service:8000/users/{user_id}"
+        )
+    return response.json()
+```
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+## Panduan Penggunaan untuk End User
 
-## License
-For open source projects, say how it is licensed.
+### 1. Tambahkan Akun Email
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+User menggunakan API key dari main app:
+
+```bash
+curl -X POST "http://localhost:8000/email-accounts" \
+  -H "X-API-Key: USER_API_KEY_FROM_MAIN_APP" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email_address": "myemail@gmail.com",
+    "imap_server": "imap.gmail.com",
+    "imap_port": 993,
+    "smtp_server": "smtp.gmail.com",
+    "smtp_port": 587,
+    "password": "your-app-password",
+    "webhook_url": "https://your-main-app.com/webhooks/email-received"
+  }'
+```
+
+**Catatan untuk Gmail**: Anda perlu menggunakan App Password, bukan password biasa. Generate di: https://myaccount.google.com/apppasswords
+
+### 2. Lihat Daftar Email yang Diterima
+
+```bash
+curl -X GET "http://localhost:8000/emails?limit=10" \
+  -H "X-API-Key: USER_API_KEY_FROM_MAIN_APP"
+```
+
+### 3. Kirim Balasan
+
+```bash
+curl -X POST "http://localhost:8000/emails/reply" \
+  -H "X-API-Key: USER_API_KEY_FROM_MAIN_APP" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "original_email_id": 1,
+    "body": "Terima kasih atas emailnya. Saya akan segera merespons."
+  }'
+```
+
+### 4. Kirim Email Baru
+
+```bash
+curl -X POST "http://localhost:8000/emails/send?account_id=1&to_addr=recipient@example.com&subject=Halo&body=Ini adalah email test" \
+  -H "X-API-Key: USER_API_KEY_FROM_MAIN_APP"
+```
+
+## Pengaturan Provider Email
+
+### Gmail
+- **IMAP**: imap.gmail.com:993
+- **SMTP**: smtp.gmail.com:587
+- **Catatan**: Gunakan App Password
+
+### Outlook/Hotmail
+- **IMAP**: outlook.office365.com:993
+- **SMTP**: smtp.office365.com:587
+
+### Yahoo
+- **IMAP**: imap.mail.yahoo.com:993
+- **SMTP**: smtp.mail.yahoo.com:587
+
+### IMAP/SMTP Custom
+- Cek dokumentasi provider email Anda
+
+## Integrasi Webhook
+
+Ketika email diterima, microservice otomatis mengirim POST request ke webhook_url yang dikonfigurasi dengan payload ini:
+
+```json
+{
+  "id": 123,
+  "message_id": "<unique-message-id@server.com>",
+  "sender": "sender@example.com",
+  "recipient": "your-email@example.com",
+  "subject": "Judul Email",
+  "body": "Isi email plain text",
+  "html_body": "<html>Isi email HTML</html>",
+  "received_at": "2025-10-23T10:30:00"
+}
+```
+
+Main app Anda dapat menangkap webhook ini dan memproses sesuai kebutuhan.
+
+## Deployment
+
+### Docker Compose (Recommended)
+
+```yaml
+version: '3.8'
+
+services:
+  email-hub:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://user:pass@postgres:5432/email_hub
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=email_hub
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=pass
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+```
+
+### Kubernetes
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: email-hub
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: email-hub
+  template:
+    metadata:
+      labels:
+        app: email-hub
+    spec:
+      containers:
+      - name: email-hub
+        image: your-registry/email-hub:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: email-hub-secrets
+              key: database-url
+```
+
+## Struktur Proyek
+
+```
+email-hub-api/
+├── main.py              # Aplikasi FastAPI dan endpoints
+├── database.py          # Konfigurasi database
+├── models.py            # Model SQLAlchemy
+├── schemas.py           # Schema Pydantic
+├── auth.py              # Logic autentikasi API key
+├── email_service.py     # Operasi IMAP/SMTP
+├── background_tasks.py  # Worker polling email
+├── requirements.txt     # Dependencies Python
+├── .env.example         # Template environment variables
+└── README.md            # File ini
+```
+
+## Endpoint API
+
+### User Management (Internal - untuk Main App)
+- `POST /users` - Buat user baru
+- `PUT /users/{external_user_id}/api-key` - Update API key
+- `DELETE /users/{external_user_id}` - Hapus user
+
+### Akun Email (untuk End User)
+- `POST /email-accounts` - Tambah akun email
+- `GET /email-accounts` - Lihat daftar akun email
+- `DELETE /email-accounts/{id}` - Hapus akun email
+
+### Operasi Email (untuk End User)
+- `GET /emails` - Lihat daftar email yang diterima
+- `POST /emails/send` - Kirim email baru
+- `POST /emails/reply` - Balas email
+
+### Webhooks
+- `POST /webhooks/email-received` - Terima email dari layanan eksternal
+
+### Health
+- `GET /health` - Health check
+
+## Keamanan
+
+⚠️ **PENTING untuk Production:**
+
+1. **Enkripsi password email** - Gunakan Fernet atau enkripsi serupa
+2. **HTTPS only** - Selalu gunakan SSL/TLS
+3. **Rate limiting** - Tambahkan rate limiting
+4. **Network isolation** - Jalankan di private network
+5. **Secret management** - Gunakan secret managers (Vault, AWS Secrets Manager)
+6. **Backup database** - Backup rutin
+7. **Monitoring** - Setup logging dan monitoring
+8. **Input validation** - Validasi semua input
+
+## Troubleshooting
+
+### Error Gmail "Less secure app"
+- Gunakan App Password
+- Aktifkan 2FA terlebih dahulu
+- Generate App Password di: https://myaccount.google.com/apppasswords
+
+### Email tidak diterima
+- Cek status akun: `GET /email-accounts`
+- Verifikasi kredensial IMAP
+- Cek logs aplikasi
+- Background worker polling setiap 2 menit
+
+### Webhook tidak terkirim
+- Verifikasi webhook URL accessible
+- Cek logs server webhook
+- Test manual dengan curl
+
+## Monitoring
+
+### Health Check
+
+```bash
+curl http://localhost:8000/health
+```
+
+### Logs
+
+```bash
+# Lihat logs background worker
+tail -f /var/log/email-hub.log
+```
+
+## Pengembangan Selanjutnya
+
+- [ ] Dukungan attachment email
+- [ ] Template email
+- [ ] Filtering dan rules
+- [ ] Pencarian email
+- [ ] Manajemen folder
+- [ ] OAuth2 untuk Gmail/Outlook
