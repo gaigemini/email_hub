@@ -1,7 +1,7 @@
 """
 Database models
 """
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -11,7 +11,7 @@ class EmailAccount(Base):
     __tablename__ = "email_accounts"
     
     id = Column(Integer, primary_key=True, index=True)
-    user_identifier = Column(String, index=True, nullable=False)  # User ID from main app
+    # user_identifier = Column(String, index=True, nullable=False)  # <-- REMOVED
     email_address = Column(String, nullable=False, index=True)
     
     # IMAP settings
@@ -43,7 +43,10 @@ class EmailMessage(Base):
     __tablename__ = "email_messages"
     
     id = Column(Integer, primary_key=True, index=True)
-    email_account_id = Column(Integer, nullable=False, index=True)
+    
+    # --- THIS IS THE FIX for the SQLAlchemy error ---
+    email_account_id = Column(Integer, ForeignKey("email_accounts.id"), nullable=False, index=True)
+    # --------------------------------------------------
     
     # Email details
     message_id = Column(String, unique=True, index=True)

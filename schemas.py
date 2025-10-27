@@ -9,25 +9,23 @@ from typing import Optional
 # ==================== Email Account Schemas ====================
 
 class EmailAccountCreate(BaseModel):
-    user_identifier: str  # User ID from main app (can be string or int)
     email_address: EmailStr
     imap_server: str
     imap_port: int = 993
     smtp_server: str
     smtp_port: int = 587
     password: str
-    webhook_url: Optional[str] = None
+    # webhook_url: Optional[str] = None  <-- REMOVED
 
 
 class EmailAccountResponse(BaseModel):
     id: int
-    user_identifier: str
     email_address: str
     imap_server: str
     imap_port: int
     smtp_server: str
     smtp_port: int
-    webhook_url: Optional[str]
+    # webhook_url: Optional[str]  <-- REMOVED
     is_active: bool
     last_checked: Optional[datetime]
     created_at: datetime

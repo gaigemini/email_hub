@@ -2,6 +2,9 @@
 FastAPI Email Hub Backend - Stateless Microservice
 Main application file
 """
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI, Depends, HTTPException, Security, status
 from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
@@ -77,12 +80,11 @@ async def add_email_account(
     
     # Check if account already exists
     existing = db.query(EmailAccount).filter(
-        EmailAccount.email_address == account_data.email_address,
-        EmailAccount.user_identifier == account_data.user_identifier
+        EmailAccount.email_address == account_data.email_address
     ).first()
     
     if existing:
-        raise HTTPException(status_code=400, detail="Email account already exists for this user")
+        raise HTTPException(status_code=400, detail="Email account already exists")
     
     # Test connection
     email_service = EmailService()
@@ -98,14 +100,13 @@ async def add_email_account(
     
     # Create email account
     new_account = EmailAccount(
-        user_identifier=account_data.user_identifier,
         email_address=account_data.email_address,
         imap_server=account_data.imap_server,
         imap_port=account_data.imap_port,
         smtp_server=account_data.smtp_server,
         smtp_port=account_data.smtp_port,
-        password=account_data.password,  # In production, encrypt this!
-        webhook_url=account_data.webhook_url
+        password=account_data.password
+        # webhook_url=account_data.webhook_url  <-- REMOVED
     )
     
     db.add(new_account)
@@ -117,16 +118,13 @@ async def add_email_account(
 
 @app.get("/email-accounts", response_model=list[EmailAccountResponse])
 async def list_email_accounts(
-    user_identifier: str,
     api_key: str = Security(api_key_header),
     db: Session = Depends(get_db)
 ):
-    """List all email accounts for a user"""
+    """List all email accounts (admin endpoint)"""
     verify_api_key(api_key)
     
-    accounts = db.query(EmailAccount).filter(
-        EmailAccount.user_identifier == user_identifier
-    ).all()
+    accounts = db.query(EmailAccount).all()
     return accounts
 
 
@@ -183,7 +181,7 @@ async def update_email_account(
     account.smtp_server = account_data.smtp_server
     account.smtp_port = account_data.smtp_port
     account.password = account_data.password
-    account.webhook_url = account_data.webhook_url
+    # account.webhook_url = account_data.webhook_url  <-- REMOVED
     
     db.commit()
     db.refresh(account)
@@ -234,7 +232,6 @@ async def toggle_email_account(
 
 @app.get("/emails", response_model=list[EmailMessageResponse])
 async def list_emails(
-    user_identifier: str = None,
     account_id: int = None,
     limit: int = 50,
     api_key: str = Security(api_key_header),
@@ -244,9 +241,6 @@ async def list_emails(
     verify_api_key(api_key)
     
     query = db.query(EmailMessage).join(EmailAccount)
-    
-    if user_identifier:
-        query = query.filter(EmailAccount.user_identifier == user_identifier)
     
     if account_id:
         query = query.filter(EmailMessage.email_account_id == account_id)

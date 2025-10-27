@@ -6,9 +6,36 @@ import smtplib
 import email
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from datetime import datetime
+from datetime import datetime, timezone  # <-- IMPORTED timezone
 from typing import List, Dict, Optional
 import ssl
+
+
+def _decode_payload(part) -> str:
+    """Safely decode email payload"""
+    
+    # Get payload bytes
+    payload = part.get_payload(decode=True)
+    if not payload:
+        return ""
+
+    # Get charset from email part
+    charset = part.get_content_charset()
+
+    # If charset is specified, try to use it
+    if charset:
+        try:
+            return payload.decode(charset, errors="replace")
+        except (UnicodeDecodeError, LookupError):
+            # Fallback if charset is wrong or unknown
+            pass
+    
+    # If no charset or if it failed, try utf-8, then latin-1
+    try:
+        return payload.decode("utf-8", errors="replace")
+    except UnicodeDecodeError:
+        # Final fallback
+        return payload.decode("latin-1", errors="replace")
 
 
 class EmailService:
@@ -75,16 +102,21 @@ class EmailService:
                         date_str = email_message.get("Date", "")
                         message_id = email_message.get("Message-ID", "")
                         
-                        # Parse date
+                        # --- THIS IS THE FIX ---
+                        # Parse date and ensure it's timezone-aware (UTC)
                         try:
                             date_tuple = email.utils.parsedate_tz(date_str)
                             if date_tuple:
                                 timestamp = email.utils.mktime_tz(date_tuple)
-                                received_at = datetime.fromtimestamp(timestamp)
+                                # Convert timestamp to aware UTC datetime
+                                received_at = datetime.fromtimestamp(timestamp, timezone.utc)
                             else:
-                                received_at = datetime.now()
+                                # Fallback to aware UTC datetime
+                                received_at = datetime.now(timezone.utc)
                         except:
-                            received_at = datetime.now()
+                            # Fallback to aware UTC datetime
+                            received_at = datetime.now(timezone.utc)
+                        # -------------------------
                         
                         # Extract body
                         body = ""
@@ -97,11 +129,12 @@ class EmailService:
                                 
                                 if "attachment" not in content_disposition:
                                     if content_type == "text/plain":
-                                        body = part.get_payload(decode=True).decode()
+                                        body = _decode_payload(part)
                                     elif content_type == "text/html":
-                                        html_body = part.get_payload(decode=True).decode()
+                                        html_body = _decode_payload(part)
                         else:
-                            body = email_message.get_payload(decode=True).decode()
+                            # Non-multipart email
+                            body = _decode_payload(email_message)
                         
                         emails.append({
                             "message_id": message_id,
@@ -161,4 +194,3 @@ class EmailService:
                 
         except Exception as e:
             raise Exception(f"Error sending email: {str(e)}")
-            

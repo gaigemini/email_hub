@@ -8,9 +8,10 @@ import os
 STATIC_API_KEY = os.getenv("API_KEY", "")
 
 if not STATIC_API_KEY:
+    print(STATIC_API_KEY)
     print("⚠️  WARNING: API_KEY not set in environment variables!")
     print("⚠️  Using default key for development only!")
-    STATIC_API_KEY = "dev-api-key-change-this-in-production"
+    STATIC_API_KEY = "AxClqR4c3mIwaKedV2oHVydGLSrFhTkjsjRgJ1vDY4GRL2xCY1ud7QTf11aWpATh"
 
 
 def verify_api_key(api_key: str) -> bool:
