@@ -13,11 +13,12 @@ WORKDIR /app
 # Copy only the requirements file first to leverage Docker cache
 COPY requirements.txt .
 
-# Install system dependencies (needed if you use packages like psycopg2 for PostgreSQL)
-# RUN apt-get update && apt-get install -y some-package && rm -rf /var/lib/apt/lists/*
-
-# Install python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Install system dependencies (needed for psycopg2)
+RUN apt-get update && apt-get install -y --no-install-recommends libpq-dev build-essential \
+    && pip install --no-cache-dir -r requirements.txt \
+    && apt-get purge -y build-essential \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
 
 # ---- Application Stage ----
 # Copy the rest of your application code
@@ -26,13 +27,13 @@ COPY . .
 # Make the entrypoint script executable
 RUN chmod +x ./entrypoint.sh
 
-# Expose the port the app will run on (for Gunicorn)
-EXPOSE 5000
+# Expose the port the app will run on (matches main.py)
+EXPOSE 8000
 
 # ---- Run Stage ----
 # Set the entrypoint to our script
 ENTRYPOINT ["./entrypoint.sh"]
 
 # The command that the entrypoint will run *after* migrations
-# This starts the Gunicorn server
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "app:app"]
+# This starts Gunicorn with Uvicorn workers for FastAPI
+CMD ["gunicorn", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "main:app"]

@@ -5,10 +5,12 @@
 # Exit immediately if a command exits with a non-zero status
 set -e
 
-echo "Applying database migrations..."
-# Set FLASK_APP environment variable if not already set
-export FLASK_APP=${FLASK_APP:-app.py}
-flask db upgrade
+echo "Waiting 5 seconds for DB to be ready..."
+sleep 5
+
+echo "Applying Alembic database migrations..."
+# This is the correct command to run Alembic migrations
+alembic upgrade head
 
 echo "Migrations applied."
 

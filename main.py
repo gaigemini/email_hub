@@ -12,8 +12,10 @@ from sqlalchemy.orm import Session
 from contextlib import asynccontextmanager
 import uvicorn
 import os
+import uuid # --- NEW ---
+from typing import Optional # --- NEW ---
 
-from database import engine, Base, get_db, init_db
+from database import engine, Base, get_db
 from models import EmailAccount, EmailMessage
 from schemas import (
     EmailAccountCreate, EmailAccountResponse,
@@ -22,9 +24,9 @@ from schemas import (
 from auth import verify_api_key
 from email_service import EmailService
 from background_tasks import start_email_polling, stop_email_polling, restore_polling_sessions
+from utils import encrypt_data, decrypt_data # --- NEW ---
 
-# Initialize database
-init_db()
+# Note: Removed init_db() call, Alembic handles this.
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -56,7 +58,7 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"], # In production, restrict this to your domain
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -75,10 +77,8 @@ async def add_email_account(
     db: Session = Depends(get_db)
 ):
     """Add a new email account"""
-    # Verify API key
     verify_api_key(api_key)
     
-    # Check if account already exists
     existing = db.query(EmailAccount).filter(
         EmailAccount.email_address == account_data.email_address
     ).first()
@@ -86,7 +86,6 @@ async def add_email_account(
     if existing:
         raise HTTPException(status_code=400, detail="Email account already exists")
     
-    # Test connection
     email_service = EmailService()
     try:
         email_service.test_connection(
@@ -98,15 +97,16 @@ async def add_email_account(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to connect: {str(e)}")
     
-    # Create email account
+    # Encrypt password before saving
+    encrypted_password = encrypt_data(account_data.password)
+    
     new_account = EmailAccount(
         email_address=account_data.email_address,
         imap_server=account_data.imap_server,
         imap_port=account_data.imap_port,
         smtp_server=account_data.smtp_server,
         smtp_port=account_data.smtp_port,
-        password=account_data.password
-        # webhook_url=account_data.webhook_url  <-- REMOVED
+        password=encrypted_password # Save encrypted password
     )
     
     db.add(new_account)
@@ -123,14 +123,13 @@ async def list_email_accounts(
 ):
     """List all email accounts (admin endpoint)"""
     verify_api_key(api_key)
-    
     accounts = db.query(EmailAccount).all()
     return accounts
 
 
 @app.get("/email-accounts/{account_id}", response_model=EmailAccountResponse)
 async def get_email_account(
-    account_id: int,
+    account_id: uuid.UUID,
     api_key: str = Security(api_key_header),
     db: Session = Depends(get_db)
 ):
@@ -146,7 +145,7 @@ async def get_email_account(
 
 @app.put("/email-accounts/{account_id}", response_model=EmailAccountResponse)
 async def update_email_account(
-    account_id: int,
+    account_id: uuid.UUID,
     account_data: EmailAccountCreate,
     api_key: str = Security(api_key_header),
     db: Session = Depends(get_db)
@@ -161,7 +160,8 @@ async def update_email_account(
     # Test new connection if credentials changed
     if (account.imap_server != account_data.imap_server or 
         account.email_address != account_data.email_address or
-        account.password != account_data.password):
+        # Check against decrypted password if possible, or just re-test
+        account.password != encrypt_data(account_data.password)): # Simple check
         
         email_service = EmailService()
         try:
@@ -169,7 +169,7 @@ async def update_email_account(
                 account_data.imap_server,
                 account_data.imap_port,
                 account_data.email_address,
-                account_data.password
+                account_data.password # Test with new plaintext password
             )
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Failed to connect: {str(e)}")
@@ -180,8 +180,8 @@ async def update_email_account(
     account.imap_port = account_data.imap_port
     account.smtp_server = account_data.smtp_server
     account.smtp_port = account_data.smtp_port
-    account.password = account_data.password
-    # account.webhook_url = account_data.webhook_url  <-- REMOVED
+    # Encrypt new password
+    account.password = encrypt_data(account_data.password)
     
     db.commit()
     db.refresh(account)
@@ -191,7 +191,7 @@ async def update_email_account(
 
 @app.delete("/email-accounts/{account_id}")
 async def delete_email_account(
-    account_id: int,
+    account_id: uuid.UUID,
     api_key: str = Security(api_key_header),
     db: Session = Depends(get_db)
 ):
@@ -210,7 +210,7 @@ async def delete_email_account(
 
 @app.post("/email-accounts/{account_id}/toggle")
 async def toggle_email_account(
-    account_id: int,
+    account_id: uuid.UUID,
     api_key: str = Security(api_key_header),
     db: Session = Depends(get_db)
 ):
@@ -232,7 +232,7 @@ async def toggle_email_account(
 
 @app.get("/emails", response_model=list[EmailMessageResponse])
 async def list_emails(
-    account_id: int = None,
+    account_id: Optional[uuid.UUID] = None, # Changed to UUID
     limit: int = 50,
     api_key: str = Security(api_key_header),
     db: Session = Depends(get_db)
@@ -251,7 +251,7 @@ async def list_emails(
 
 @app.get("/emails/{email_id}", response_model=EmailMessageResponse)
 async def get_email(
-    email_id: int,
+    email_id: uuid.UUID, # Changed to UUID
     api_key: str = Security(api_key_header),
     db: Session = Depends(get_db)
 ):
@@ -274,7 +274,6 @@ async def send_reply(
     """Send a reply email"""
     verify_api_key(api_key)
     
-    # Get the original email
     original_email = db.query(EmailMessage).filter(
         EmailMessage.id == reply_data.original_email_id
     ).first()
@@ -282,24 +281,32 @@ async def send_reply(
     if not original_email:
         raise HTTPException(status_code=404, detail="Original email not found")
     
-    # Get the email account
     account = original_email.email_account
     
-    # Send reply
+    # --- FIX: Decrypt password before use ---
+    try:
+        decrypted_password = decrypt_data(account.password)
+    except Exception as e:
+        print(f"❌ CRITICAL: Failed to decrypt password for reply: {e}")
+        raise HTTPException(status_code=500, detail="Failed to decrypt account credentials")
+    # --- END FIX ---
+
     email_service = EmailService()
     try:
         email_service.send_email(
             smtp_server=account.smtp_server,
             smtp_port=account.smtp_port,
             username=account.email_address,
-            password=account.password,
+            password=decrypted_password, # Use decrypted password
             from_addr=account.email_address,
             to_addr=original_email.sender,
             subject=f"Re: {original_email.subject}",
             body=reply_data.body,
+            html_body=reply_data.html_body,
             reply_to_message_id=original_email.message_id
         )
     except Exception as e:
+        print(f"❌ FAILED TO SEND REPLY: {str(e)}") # Added logging
         raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
     
     return {"message": "Reply sent successfully"}
@@ -314,7 +321,6 @@ async def send_email(
     """Send a new email"""
     verify_api_key(api_key)
     
-    # Get the email account
     account = db.query(EmailAccount).filter(
         EmailAccount.id == email_data.account_id
     ).first()
@@ -322,14 +328,21 @@ async def send_email(
     if not account:
         raise HTTPException(status_code=404, detail="Email account not found")
     
-    # Send email
+    # --- FIX: Decrypt password before use ---
+    try:
+        decrypted_password = decrypt_data(account.password)
+    except Exception as e:
+        print(f"❌ CRITICAL: Failed to decrypt password for send: {e}")
+        raise HTTPException(status_code=500, detail="Failed to decrypt account credentials")
+    # --- END FIX ---
+    
     email_service = EmailService()
     try:
         email_service.send_email(
             smtp_server=account.smtp_server,
             smtp_port=account.smtp_port,
             username=account.email_address,
-            password=account.password,
+            password=decrypted_password, # Use decrypted password
             from_addr=account.email_address,
             to_addr=email_data.to_addr,
             subject=email_data.subject,
@@ -337,6 +350,7 @@ async def send_email(
             html_body=email_data.html_body
         )
     except Exception as e:
+        print(f"❌ FAILED TO SEND EMAIL: {str(e)}") # Added logging
         raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
     
     return {"message": "Email sent successfully"}
@@ -351,8 +365,6 @@ async def webhook_email_received(
 ):
     """Webhook endpoint for external services to send emails"""
     verify_api_key(api_key)
-    
-    # Process webhook payload
     return {"message": "Webhook received", "email_id": payload.id}
 
 
@@ -386,3 +398,4 @@ async def service_status(
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+

@@ -24,11 +24,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
-def init_db():
-    """Initialize database - create all tables"""
-    print("📦 Initializing database...")
-    Base.metadata.create_all(bind=engine)
-    print("✅ Database initialized successfully")
+# REMOVED init_db() function
 
 
 # Dependency to get DB session

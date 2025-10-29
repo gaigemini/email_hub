@@ -1,6 +1,7 @@
 """
 Pydantic schemas for request/response validation
 """
+import uuid
 from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime
 from typing import Optional
@@ -14,18 +15,17 @@ class EmailAccountCreate(BaseModel):
     imap_port: int = 993
     smtp_server: str
     smtp_port: int = 587
-    password: str
-    # webhook_url: Optional[str] = None  <-- REMOVED
+    password: str # We receive plaintext, then encrypt it
 
 
 class EmailAccountResponse(BaseModel):
-    id: int
+    # --- CHANGED to UUID ---
+    id: uuid.UUID
     email_address: str
     imap_server: str
     imap_port: int
     smtp_server: str
     smtp_port: int
-    # webhook_url: Optional[str]  <-- REMOVED
     is_active: bool
     last_checked: Optional[datetime]
     created_at: datetime
@@ -37,8 +37,9 @@ class EmailAccountResponse(BaseModel):
 # ==================== Email Message Schemas ====================
 
 class EmailMessageResponse(BaseModel):
-    id: int
-    email_account_id: int
+    # --- CHANGED to UUID ---
+    id: uuid.UUID
+    email_account_id: uuid.UUID
     message_id: str
     sender: str
     recipient: str
@@ -54,13 +55,15 @@ class EmailMessageResponse(BaseModel):
 
 
 class EmailReplyRequest(BaseModel):
-    original_email_id: int
+    # --- CHANGED to UUID ---
+    original_email_id: uuid.UUID
     body: str
     html_body: Optional[str] = None
 
 
 class EmailSendRequest(BaseModel):
-    account_id: int
+    # --- CHANGED to UUID ---
+    account_id: uuid.UUID
     to_addr: str
     subject: str
     body: str
@@ -71,8 +74,8 @@ class EmailSendRequest(BaseModel):
 
 class WebhookPayload(BaseModel):
     """Payload structure for incoming webhooks"""
-    id: int
-    email_account_id: int
+    # --- CHANGED to UUID ---
+    id: uuid.UUID
     sender: str
     recipient: str
     subject: str

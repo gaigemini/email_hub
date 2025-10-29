@@ -6,11 +6,12 @@ import httpx
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-import os  # Imported OS
+import os
 
 from database import SessionLocal
 from models import EmailAccount, EmailMessage
 from email_service import EmailService
+from utils import decrypt_data # --- NEW ---
 
 # Global task reference
 email_polling_task: Optional[asyncio.Task] = None
@@ -25,7 +26,6 @@ async def restore_polling_sessions():
     
     db = SessionLocal()
     try:
-        # Get all active email accounts
         active_accounts = db.query(EmailAccount).filter(
             EmailAccount.is_active == True
         ).all()
@@ -35,7 +35,6 @@ async def restore_polling_sessions():
         for account in active_accounts:
             print(f"  ✓ Restored session: {account.email_address} (ID: {account.id})")
             
-            # Check last_checked time
             if account.last_checked:
                 time_since = datetime.now(timezone.utc) - account.last_checked
                 print(f"    Last checked: {time_since.total_seconds():.0f} seconds ago")
@@ -53,31 +52,33 @@ async def restore_polling_sessions():
 async def poll_email_account(account: EmailAccount, db: Session):
     """Poll a single email account for new emails"""
     
-    # Get the global webhook URL from environment
     global_webhook_url = os.getenv("WEBHOOK_URL")
-    
-    # Get the webhook enabled flag (default to True if not set)
     webhook_enabled_str = os.getenv("WEBHOOK_ENABLED", "True")
     webhook_enabled = webhook_enabled_str.lower() in ("true", "1", "t")
 
     try:
         email_service = EmailService()
         
+        # --- NEW: Decrypt password before use ---
+        try:
+            decrypted_password = decrypt_data(account.password)
+        except Exception as e:
+            print(f"❌ Decryption failed for account {account.email_address}: {e}. Skipping poll.")
+            return # Skip this account if decryption fails
+
         # Fetch new emails
         emails = email_service.fetch_emails(
             imap_server=account.imap_server,
             imap_port=account.imap_port,
             username=account.email_address,
-            password=account.password,
+            password=decrypted_password, # Use decrypted password
             unread_only=True,
             limit=20
         )
         
         new_emails_count = 0
         
-        # Process each email
         for email_data in emails:
-            # Check if email already exists
             existing = db.query(EmailMessage).filter(
                 EmailMessage.message_id == email_data["message_id"]
             ).first()
@@ -85,7 +86,6 @@ async def poll_email_account(account: EmailAccount, db: Session):
             if existing:
                 continue
             
-            # Save to database
             new_message = EmailMessage(
                 email_account_id=account.id,
                 message_id=email_data["message_id"],
@@ -103,17 +103,14 @@ async def poll_email_account(account: EmailAccount, db: Session):
             
             new_emails_count += 1
             
-            # --- THIS IS THE FIX ---
-            # Check if the email is "new" (received after the account was created)
-            # Both datetimes are now timezone-aware, so this comparison is safe
+            # --- THIS IS THE LOG YOU REQUESTED ---
+            print(f"✅ NEW EMAIL LOGGED: ID={new_message.id} Account={account.email_address} Subject='{new_message.subject}'")
+            
             is_new_email = new_message.received_at > account.created_at
 
-            # Send to webhook if URL is set, webhooks are enabled, AND it's a new email
             if global_webhook_url and webhook_enabled and is_new_email:
                 await send_to_webhook(global_webhook_url, new_message, db)
-            # -----------------------
         
-        # Update last checked time
         account.last_checked = datetime.now(timezone.utc)
         db.commit()
         
@@ -122,13 +119,17 @@ async def poll_email_account(account: EmailAccount, db: Session):
         
     except Exception as e:
         print(f"❌ Error polling account {account.email_address}: {e}")
+        # Note: We don't update last_checked time on failure, so it retries sooner
+    finally:
+        # Ensure db connection is closed if it was passed in
+        pass
 
 
 async def send_to_webhook(webhook_url: str, message: EmailMessage, db: Session):
     """Send email to webhook URL"""
     try:
         payload = {
-            "id": message.id,
+            "id": str(message.id), # --- CHANGED to string for JSON compatibility ---
             "message_id": message.message_id,
             "sender": message.sender,
             "recipient": message.recipient,
@@ -160,26 +161,32 @@ async def email_polling_worker():
     """
     print("🤖 Email polling worker started")
     
+    # Get polling intervals from environment
+    try:
+        POLLING_INTERVAL_SECONDS = int(os.getenv("POLLING_INTERVAL_SECONDS", "120"))
+        POLLING_CHECK_INTERVAL_SECONDS = int(os.getenv("POLLING_CHECK_INTERVAL_SECONDS", "30"))
+    except ValueError:
+        print("⚠️ Invalid polling interval in env, using defaults.")
+        POLLING_INTERVAL_SECONDS = 120
+        POLLING_CHECK_INTERVAL_SECONDS = 30
+
     while True:
         try:
             db = SessionLocal()
             
-            # Get all active email accounts from database
-            # This ensures we always have the latest state even after restart
             accounts = db.query(EmailAccount).filter(
                 EmailAccount.is_active == True
             ).all()
             
-            # Poll each account
             for account in accounts:
-                # Check if it's time to poll (every 2 minutes)
                 should_poll = False
                 
                 if account.last_checked is None:
                     should_poll = True
                 else:
+            
                     time_since_last_check = datetime.now(timezone.utc) - account.last_checked
-                    if time_since_last_check > timedelta(minutes=2):
+                    if time_since_last_check > timedelta(seconds=POLLING_INTERVAL_SECONDS):
                         should_poll = True
                 
                 if should_poll:
@@ -187,12 +194,13 @@ async def email_polling_worker():
             
             db.close()
             
-            # Wait before next iteration (30 seconds)
-            await asyncio.sleep(30)
+            await asyncio.sleep(POLLING_CHECK_INTERVAL_SECONDS)
             
         except Exception as e:
             print(f"❌ Error in polling worker: {e}")
-            await asyncio.sleep(60)  # Wait longer on error
+            if 'db' in locals() and db:
+                db.close() # Ensure db is closed on error
+            await asyncio.sleep(60)
 
 
 async def start_email_polling():
@@ -215,3 +223,4 @@ async def stop_email_polling():
         except asyncio.CancelledError:
             print("✅ Email polling task stopped")
         email_polling_task = None
+

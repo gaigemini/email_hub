@@ -1,21 +1,11 @@
-# FastAPI and Web Framework
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
+gunicorn
 python-multipart==0.0.6
-
-# Database
 sqlalchemy==2.0.23
 psycopg2-binary==2.9.9
 alembic==1.12.1
-
-# Validation
 pydantic[email]==2.5.0
-
-# HTTP Client
 httpx==0.25.2
-
-# Email
-# No additional libraries needed - using built-in imaplib and smtplib
-
-# Environment
 python-dotenv==1.0.0
+cryptography==42.0.5
